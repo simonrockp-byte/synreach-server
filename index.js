@@ -18,6 +18,13 @@ if (process.env.ENABLE_WHATSAPP === 'true') {
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Supabase Init
+let supabase = null;
+if (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY) {
+  const { createClient } = require('@supabase/supabase-js');
+  supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+}
+
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'http://localhost:5173,http://localhost:3000').split(',');
 
 app.use(cors({
@@ -90,19 +97,37 @@ app.post('/api/discover', async (req, res) => {
           linkedinUrl: item.link,
           source: 'Google Search'
         }));
-      } else {
-      // Mockup results if no API key is provided
-      console.log('No SerpApi key found, returning mockup results.');
-      leads = [
-        { name: 'Mwansa Kabwe', title: 'HR Manager at ZAMTEL', linkedinUrl: 'https://www.linkedin.com/in/mwansa-kabwe-123', location: 'Lusaka, Zambia' },
-        { name: 'Sarah Phiri', title: 'Senior Talent Acquisition - Airtel', linkedinUrl: 'https://www.linkedin.com/in/sarah-phiri-456', location: 'Lusaka, Zambia' },
-        { name: 'John Zulu', title: 'Head of Human Resources - Stanbic', linkedinUrl: 'https://www.linkedin.com/in/john-zulu-789', location: 'Lusaka, Zambia' },
-        { name: 'Chipo Mubita', title: 'HR Specialist at PwC Zambia', linkedinUrl: 'https://www.linkedin.com/in/chipo-mubita-012', location: 'Lusaka, Zambia' },
-        { name: 'Memory Ngoma', title: 'People & Culture Lead - ABSA', linkedinUrl: 'https://www.linkedin.com/in/memory-ngoma-345', location: 'Lusaka, Zambia' }
-      ];
-    }
+      }
 
-    // 2. Mockup Enrichment Logic (To be later replaced by Apollo/Hunter API)
+      // ── AI Filtering ──────────────────────────────────────────────────────
+      // Perform a sanity check on results if we have an AI key
+      if (leads.length > 0 && googleApiKey) {
+        console.log(`AI is filtering ${leads.length} candidates...`);
+        try {
+          const filterPrompt = `You are a lead qualification assistant. 
+Review this list of potential leads found for the query: "${query}".
+Output a JSON array of indices (0-indexed) for ONLY the leads that are genuinely relevant to the query.
+Examine their titles and snippets. If it looks like a generic profile or irrelevant, exclude it.
+
+Leads:
+${leads.map((l, i) => `${i}: ${l.name} - ${l.title}`).join('\n')}
+
+Output format: [0, 2, 5]`;
+
+          const aiResponse = await axios.post(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${googleApiKey}`, {
+            contents: [{ parts: [{ text: filterPrompt }] }]
+          });
+          
+          const rawOutput = aiResponse.data.candidates[0].content.parts[0].text;
+          const validIndices = JSON.parse(rawOutput.match(/\[.*\]/)[0]);
+          leads = leads.filter((_, i) => validIndices.includes(i));
+          console.log(`AI Qualifed ${leads.length} relevant leads.`);
+        } catch (err) {
+          console.error('AI Filtering failed, returning raw results:', err.message);
+        }
+      }
+
+      // 2. Mockup Enrichment Logic (to be replaced by Apollo/Hunter API)
     const enrichedLeads = leads.map(lead => ({
       ...lead,
       email: `${lead.name.toLowerCase().replace(' ', '.')}@${lead.title.split(' - ').slice(-1)[0].toLowerCase().trim().replace(' ', '')}.com`,
@@ -192,6 +217,16 @@ app.post('/api/send', async (req, res) => {
 
       const plainTextContent = content.replace(/<[^>]*>/g, '');
       await whatsappService.safeSend(recipient, plainTextContent);
+
+      // Record in Supabase
+      if (supabase && leadId) {
+        await supabase.from('messages').insert({
+          lead_id: leadId,
+          content: plainTextContent,
+          direction: 'outgoing',
+          platform: 'whatsapp'
+        });
+      }
       
       res.json({
         success: true,
@@ -202,6 +237,16 @@ app.post('/api/send', async (req, res) => {
       // Real Email Integration (with fallback to simulation if API key is missing)
       const result = await emailService.sendEmail(recipient, subject || 'Partnership Proposal', content);
       
+      // Record in Supabase
+      if (supabase && leadId) {
+        await supabase.from('messages').insert({
+          lead_id: leadId,
+          content: content,
+          direction: 'outgoing',
+          platform: 'email'
+        });
+      }
+
       res.json({
         success: true,
         method: 'email',
