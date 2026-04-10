@@ -200,4 +200,9 @@ app.get('/api/health', (req, res) => res.json({
   aiReady: !!process.env.GOOGLE_API_KEY,
 }));
 
-app.listen(PORT, () => console.log(`Synreach Backend running on port ${PORT}`));
+app.listen(PORT, () => {
+    console.log(`Synreach Backend running on port ${PORT}`);
+    console.log(`[DIAGNOSTICS] AI Key: ${process.env.GOOGLE_API_KEY ? 'EXISTS' : 'MISSING'}`);
+    console.log(`[DIAGNOSTICS] WhatsApp Token: ${process.env.WHATSAPP_TOKEN ? 'EXISTS' : 'MISSING'}`);
+    console.log(`[DIAGNOSTICS] Phone ID: ${process.env.WHATSAPP_PHONE_ID ? 'EXISTS' : 'MISSING'}`);
+});
