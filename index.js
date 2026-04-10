@@ -166,7 +166,11 @@ app.post('/api/generate', async (req, res) => {
     const text = response.data.candidates[0].content.parts[0].text;
     return res.json({ draft: text.trim() });
   } catch (error) {
-    res.status(500).json({ error: 'AI Generation failed' });
+    console.error('[AI GENERATE] Critical Failure:', error.response?.data || error.message);
+    res.status(500).json({ 
+      error: 'AI Generation failed', 
+      details: error.response?.data?.error?.message || error.message 
+    });
   }
 });
 
