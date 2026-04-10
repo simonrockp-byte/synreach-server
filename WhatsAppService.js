@@ -1,91 +1,61 @@
-const { Client, LocalAuth } = require('whatsapp-web.js');
-const qrcode = require('qrcode-terminal');
+const axios = require('axios');
 
+/**
+ * WhatsApp Service (Meta Cloud API Version)
+ * This replaces the legacy whatsapp-web.js implementation which required Chrome.
+ */
 class WhatsAppService {
-    constructor() {
-        this.client = new Client({
-            authStrategy: new LocalAuth(),
-            puppeteer: {
-                headless: true,
-                args: [
-                    '--no-sandbox',
-                    '--disable-setuid-sandbox',
-                    '--disable-extensions'
-                ]
-            }
-        });
+  constructor() {
+    this.accessToken = process.env.WHATSAPP_TOKEN;
+    this.phoneId = process.env.WHATSAPP_PHONE_ID;
+    this.version = 'v23.0'; // Latest Meta API version
+    this.isReady = !!(this.accessToken && this.phoneId);
 
-        this.isReady = false;
-        this.initialize();
+    if (this.isReady) {
+      console.log('WhatsApp Cloud API Service initialized.');
+    } else {
+      console.warn('WhatsApp Cloud API missing credentials. Service suspended.');
     }
+  }
 
-    initialize() {
-        this.client.on('qr', (qr) => {
-            console.log('--- SCAN THIS QR CODE WITH WHATSAPP ---');
-            qrcode.generate(qr, { small: true });
-        });
+  /**
+   * Sends a message using Meta Cloud API
+   * @param {string} to - Recipient phone number in international format
+   * @param {string} text - Message body
+   */
+  async safeSend(to, text) {
+    if (!this.isReady) throw new Error('WhatsApp service not initialized');
+    
+    // Clean phone number (remove +, spaces, dashes)
+    const cleanTo = to.replace(/\D/g, '');
 
-        this.client.on('ready', () => {
-            console.log('WhatsApp Client is READY');
-            this.isReady = true;
-        });
+    console.log(`[WHATSAPP] Sending message to ${cleanTo}...`);
 
-        this.client.on('authenticated', () => {
-            console.log('WhatsApp AUTHENTICATED');
-        });
-
-        this.client.on('auth_failure', (msg) => {
-            console.error('WhatsApp AUTH FAILURE', msg);
-        });
-
-        this.client.initialize();
-    }
-
-    /**
-     * Sends a message with Anti-Ban safety measures:
-     * 1. Randomized Delay (Human rhythm)
-     * 2. Simulated Typing status
-     * 3. Presence simulation
-     */
-    async safeSend(number, message) {
-        if (!this.isReady) {
-            throw new Error('WhatsApp client not ready. Please scan QR code first.');
+    try {
+      const response = await axios.post(
+        `https://graph.facebook.com/${this.version}/${this.phoneId}/messages`,
+        {
+          messaging_product: "whatsapp",
+          recipient_type: "individual",
+          to: cleanTo,
+          type: "text",
+          text: { body: text }
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${this.accessToken}`,
+            'Content-Type': 'application/json'
+          }
         }
+      );
 
-        // 1. Format number (ensure it ends with @c.us)
-        const chatId = number.includes('@') ? number : `${number.replace(/[^0-9]/g, '')}@c.us`;
-
-        try {
-            const chat = await this.client.getChatById(chatId);
-
-            // 2. Randomized "Thinking" delay (2-5 seconds)
-            const thinkingDelay = Math.floor(Math.random() * 3000) + 2000;
-            await new Promise(resolve => setTimeout(resolve, thinkingDelay));
-
-            // 3. Simulate "Typing..."
-            await chat.sendStateTyping();
-
-            // 4. Randomized "Typing" delay based on message length (approx 50ms per char)
-            const typingSpeed = Math.floor(Math.random() * 20) + 30; // 30-50ms per char
-            const typingDuration = Math.min(message.length * typingSpeed, 10000); // Max 10s typing
-            await new Promise(resolve => setTimeout(resolve, typingDuration));
-
-            // 5. Send message
-            const result = await this.client.sendMessage(chatId, message);
-            
-            // 6. Stop typing
-            await chat.clearState();
-
-            // 7. Post-send randomized cooldown (guards against "burst" detection)
-            const cooldown = Math.floor(Math.random() * 5000) + 5000; // 5-10s cooldown
-            await new Promise(resolve => setTimeout(resolve, cooldown));
-
-            return result;
-        } catch (error) {
-            console.error('WhatsApp safeSend Error:', error);
-            throw error;
-        }
+      console.log('[WHATSAPP] Message delivered successfully.');
+      return response.data;
+    } catch (error) {
+      console.error('[WHATSAPP] Send failed:', error.response?.data || error.message);
+      throw error;
     }
+  }
 }
 
 module.exports = new WhatsAppService();
