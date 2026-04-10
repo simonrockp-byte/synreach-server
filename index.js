@@ -120,11 +120,10 @@ app.post('/api/discover', async (req, res) => {
     source: 'Synreach AI Engine',
   }));
 
-  // SENIOR REVIEW: Optimized Hunter.io Enrichment (Parallel limited)
+  // HUNTER.IO ENRICHMENT (Optional Pro Feature)
   const hunterApiKey = process.env.HUNTER_API_KEY;
   if (hunterApiKey && final.length > 0) {
     console.log(`[DISCOVERY] Enriching with Hunter.io...`);
-    // Only enrich the first 5 leads to keep response time fast/safe
     const toEnrich = final.slice(0, 5);
     await Promise.all(toEnrich.map(async (lead, idx) => {
         try {
