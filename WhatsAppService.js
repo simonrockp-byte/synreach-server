@@ -9,6 +9,7 @@ class WhatsAppService {
     this.accessToken = process.env.WHATSAPP_TOKEN;
     this.phoneId = process.env.WHATSAPP_PHONE_ID;
     this.version = 'v23.0'; // Latest Meta API version
+    // Initialization Pulse: 2026-04-10T12:15:00Z
     this.isReady = !!(this.accessToken && this.phoneId);
 
     if (this.isReady) {
