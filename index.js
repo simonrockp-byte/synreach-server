@@ -22,8 +22,9 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '*').split(',');
 
 app.use(cors({
   origin: (origin, callback) => {
+    // We use a simple check to allow Vercel origins or local development
     if (!origin || ALLOWED_ORIGINS.includes(origin) || ALLOWED_ORIGINS.includes('*')) return callback(null, true);
-    callback(new Error(`CORS: origin ${origin} not allowed`));
+    callback(new Error('CORS: origin ' + origin + ' not allowed'));
   },
   methods: ['GET', 'POST'],
   allowedHeaders: ['Content-Type'],
@@ -38,25 +39,14 @@ app.post('/api/discover', async (req, res) => {
 
   if (!query) return res.status(400).json({ error: 'Query is required' });
   
-  console.log(`[DISCOVERY] Mining leads for: "${query}"`);
+  console.log('[DISCOVERY] Mining leads for: ' + query);
 
   try {
     // We use Gemini 2.0 Flash to generate high-quality, realistic leads.
     // This is the "SaaS Engine" that ensures we always deliver value.
-    const prompt = `You are a professional lead generation engine. 
-    The user is looking for: "${query}".
-    Generate 6-8 highly realistic professional contacts that would be found on LinkedIn for this request.
-    Format your response as a valid JSON array of objects with these fields:
-    - name: Full name
-    - title: Professional job title
-    - company: Current company
-    - linkedinUrl: A realistic linkedin profile URL
-    - location: City, Country
-    - email: A realistic professional email address
-    - phone: A realistic phone number with country code.
-    Only return the JSON array, no extra text.`;
+    const prompt = 'You are a professional lead generation engine. The user is looking for: ' + query + '. Generate 6-8 highly realistic professional contacts that would be found on LinkedIn for this request. Format your response as a valid JSON array of objects with these fields: name, title, company, linkedinUrl, location, email, phone. Only return the JSON array, no extra text.';
 
-    const aiRes = await axios.post(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${googleApiKey}`, {
+    const aiRes = await axios.post('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + googleApiKey, {
       contents: [{ parts: [{ text: prompt }] }]
     });
 
@@ -95,4 +85,4 @@ app.post('/api/send', async (req, res) => {
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', emailReady: true, whatsappReady: false }));
 
-app.listen(PORT, () => console.log(`Synreach Backend running on port ${PORT}`));
+app.listen(PORT, () => console.log('Synreach Backend running on port ' + PORT));
